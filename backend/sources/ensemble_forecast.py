@@ -1,4 +1,4 @@
-"""Weather data fetcher using Open-Meteo Ensemble API and NWS observations."""
+"""Ensemble weather forecast provider via Open-Meteo API and NWS observations."""
 import httpx
 import logging
 from dataclasses import dataclass, field
@@ -9,8 +9,7 @@ import time
 
 logger = logging.getLogger("trading_bot")
 
-# City configurations with lat/lon and NWS station identifiers
-CITY_CONFIG: Dict[str, dict] = {
+STATION_REGISTRY: Dict[str, dict] = {
     "nyc": {
         "name": "New York City",
         "lat": 40.7128,
@@ -55,13 +54,13 @@ CITY_CONFIG: Dict[str, dict] = {
 
 
 @dataclass
-class EnsembleForecast:
-    """Ensemble weather forecast with per-member data."""
+class WeatherEnsemble:
+    """Multi-member ensemble forecast with per-member temperature arrays."""
     city_key: str
     city_name: str
     target_date: date
-    member_highs: List[float]  # Daily max temps (F) per ensemble member
-    member_lows: List[float]   # Daily min temps (F) per ensemble member
+    member_highs: List[float]
+    member_lows: List[float]
     mean_high: float = 0.0
     std_high: float = 0.0
     mean_low: float = 0.0
@@ -79,30 +78,25 @@ class EnsembleForecast:
             self.std_low = statistics.stdev(self.member_lows) if len(self.member_lows) > 1 else 0.0
 
     def probability_high_above(self, threshold_f: float) -> float:
-        """Fraction of ensemble members with daily high above threshold."""
         if not self.member_highs:
             return 0.5
         count = sum(1 for h in self.member_highs if h > threshold_f)
         return count / len(self.member_highs)
 
     def probability_high_below(self, threshold_f: float) -> float:
-        """Fraction of ensemble members with daily high below threshold."""
         return 1.0 - self.probability_high_above(threshold_f)
 
     def probability_low_above(self, threshold_f: float) -> float:
-        """Fraction of ensemble members with daily low above threshold."""
         if not self.member_lows:
             return 0.5
         count = sum(1 for l in self.member_lows if l > threshold_f)
         return count / len(self.member_lows)
 
     def probability_low_below(self, threshold_f: float) -> float:
-        """Fraction of ensemble members with daily low below threshold."""
         return 1.0 - self.probability_low_above(threshold_f)
 
     @property
     def ensemble_agreement(self) -> float:
-        """How one-sided the ensemble is (0.5 = split, 1.0 = unanimous)."""
         if not self.member_highs:
             return 0.5
         median = statistics.median(self.member_highs)
@@ -111,42 +105,40 @@ class EnsembleForecast:
         return max(frac, 1 - frac)
 
 
-# Simple cache: (city_key, target_date_str) -> (timestamp, EnsembleForecast)
-_forecast_cache: Dict[str, tuple] = {}
-_CACHE_TTL = 900  # 15 minutes
+_ensemble_cache: Dict[str, tuple] = {}
+_ENSEMBLE_TTL = 900
 
 
-def _celsius_to_fahrenheit(c: float) -> float:
+def _c_to_f(c: float) -> float:
     return c * 9.0 / 5.0 + 32.0
 
 
-async def fetch_ensemble_forecast(city_key: str, target_date: Optional[date] = None) -> Optional[EnsembleForecast]:
+async def load_ensemble(city_key: str, target_date: Optional[date] = None) -> Optional[WeatherEnsemble]:
     """
-    Fetch ensemble forecast from Open-Meteo Ensemble API (free, 31-member GFS).
+    Pull ensemble forecast from Open-Meteo (GFS 31-member).
     Returns per-member daily max/min temperatures in Fahrenheit.
     """
-    if city_key not in CITY_CONFIG:
+    if city_key not in STATION_REGISTRY:
         logger.warning(f"Unknown city key: {city_key}")
         return None
 
     if target_date is None:
         target_date = date.today()
 
-    cache_key = f"{city_key}_{target_date.isoformat()}"
+    cache_id = f"{city_key}_{target_date.isoformat()}"
     now = time.time()
-    if cache_key in _forecast_cache:
-        cached_time, cached_forecast = _forecast_cache[cache_key]
-        if now - cached_time < _CACHE_TTL:
-            return cached_forecast
+    if cache_id in _ensemble_cache:
+        cached_ts, cached_data = _ensemble_cache[cache_id]
+        if now - cached_ts < _ENSEMBLE_TTL:
+            return cached_data
 
-    city = CITY_CONFIG[city_key]
+    station = STATION_REGISTRY[city_key]
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            # Open-Meteo Ensemble API — GFS ensemble with 31 members
-            params = {
-                "latitude": city["lat"],
-                "longitude": city["lon"],
+        async with httpx.AsyncClient(timeout=15.0) as http:
+            query = {
+                "latitude": station["lat"],
+                "longitude": station["lon"],
                 "daily": "temperature_2m_max,temperature_2m_min",
                 "temperature_unit": "fahrenheit",
                 "start_date": target_date.isoformat(),
@@ -154,20 +146,17 @@ async def fetch_ensemble_forecast(city_key: str, target_date: Optional[date] = N
                 "models": "gfs_seamless",
             }
 
-            response = await client.get(
+            resp = await http.get(
                 "https://ensemble-api.open-meteo.com/v1/ensemble",
-                params=params,
+                params=query,
             )
-            response.raise_for_status()
-            data = response.json()
+            resp.raise_for_status()
+            payload = resp.json()
 
-            daily = data.get("daily", {})
+            daily = payload.get("daily", {})
 
-            # Open-Meteo returns each ensemble member as a separate key:
-            #   temperature_2m_max (control), temperature_2m_max_member01, ..., _member30
-            # Collect all member values for highs and lows
-            member_highs = []
-            member_lows = []
+            highs = []
+            lows = []
 
             for key, values in daily.items():
                 if not isinstance(values, list) or not values:
@@ -176,80 +165,78 @@ async def fetch_ensemble_forecast(city_key: str, target_date: Optional[date] = N
                 if val is None:
                     continue
                 if "temperature_2m_max" in key:
-                    member_highs.append(float(val))
+                    highs.append(float(val))
                 elif "temperature_2m_min" in key:
-                    member_lows.append(float(val))
+                    lows.append(float(val))
 
-            if not member_highs:
+            if not highs:
                 logger.warning(f"No ensemble data for {city_key} on {target_date}")
                 return None
 
-            forecast = EnsembleForecast(
+            ensemble = WeatherEnsemble(
                 city_key=city_key,
-                city_name=city["name"],
+                city_name=station["name"],
                 target_date=target_date,
-                member_highs=member_highs,
-                member_lows=member_lows,
+                member_highs=highs,
+                member_lows=lows,
             )
 
-            _forecast_cache[cache_key] = (now, forecast)
-            logger.info(f"Ensemble forecast for {city['name']} on {target_date}: "
-                        f"High {forecast.mean_high:.1f}F +/- {forecast.std_high:.1f}F "
-                        f"({forecast.num_members} members)")
+            _ensemble_cache[cache_id] = (now, ensemble)
+            logger.info(f"Ensemble forecast for {station['name']} on {target_date}: "
+                        f"High {ensemble.mean_high:.1f}F +/- {ensemble.std_high:.1f}F "
+                        f"({ensemble.num_members} members)")
 
-            return forecast
+            return ensemble
 
-    except Exception as e:
-        logger.warning(f"Failed to fetch ensemble forecast for {city_key}: {e}")
+    except Exception as exc:
+        logger.warning(f"Failed to fetch ensemble forecast for {city_key}: {exc}")
         return None
 
 
-async def fetch_nws_observed_temperature(city_key: str, target_date: Optional[date] = None) -> Optional[Dict[str, float]]:
+async def load_observed_temp(city_key: str, target_date: Optional[date] = None) -> Optional[Dict[str, float]]:
     """
-    Fetch observed temperature from NWS API for settlement.
-    Returns dict with 'high' and 'low' in Fahrenheit, or None if not available.
+    Retrieve observed temperature from NWS API for position settlement.
+    Returns dict with 'high' and 'low' in Fahrenheit, or None.
     """
-    if city_key not in CITY_CONFIG:
+    if city_key not in STATION_REGISTRY:
         return None
 
-    city = CITY_CONFIG[city_key]
+    station = STATION_REGISTRY[city_key]
     if target_date is None:
         target_date = date.today()
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            # NWS observations endpoint
-            station = city["nws_station"]
-            url = f"https://api.weather.gov/stations/{station}/observations"
+        async with httpx.AsyncClient(timeout=15.0) as http:
+            station_id = station["nws_station"]
+            url = f"https://api.weather.gov/stations/{station_id}/observations"
             headers = {"User-Agent": "(trading-bot, contact@example.com)"}
 
-            # Get observations for the target date
             start = datetime.combine(target_date, datetime.min.time()).isoformat() + "Z"
             end = datetime.combine(target_date + timedelta(days=1), datetime.min.time()).isoformat() + "Z"
 
-            response = await client.get(url, params={"start": start, "end": end}, headers=headers)
-            response.raise_for_status()
-            data = response.json()
+            resp = await http.get(url, params={"start": start, "end": end}, headers=headers)
+            resp.raise_for_status()
+            payload = resp.json()
 
-            features = data.get("features", [])
+            features = payload.get("features", [])
             if not features:
                 return None
 
-            temps = []
+            readings = []
             for obs in features:
                 props = obs.get("properties", {})
                 temp_c = props.get("temperature", {}).get("value")
                 if temp_c is not None:
-                    temps.append(_celsius_to_fahrenheit(temp_c))
+                    readings.append(_c_to_f(temp_c))
 
-            if not temps:
+            if not readings:
                 return None
 
             return {
-                "high": max(temps),
-                "low": min(temps),
+                "high": max(readings),
+                "low": min(readings),
             }
 
-    except Exception as e:
-        logger.warning(f"Failed to fetch NWS observations for {city_key}: {e}")
+    except Exception as exc:
+        logger.warning(f"Failed to fetch NWS observations for {city_key}: {exc}")
         return None

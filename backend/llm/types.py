@@ -1,4 +1,4 @@
-"""Base classes and types for AI integration."""
+"""Core types and abstractions for LLM integration."""
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -6,17 +6,16 @@ from typing import Optional, List, Dict, Any
 from enum import Enum
 
 
-class AIProvider(str, Enum):
-    """Supported AI providers."""
+class LLMVendor(str, Enum):
     CLAUDE = "claude"
     GROQ = "groq"
 
 
 @dataclass
-class AIAnalysis:
-    """Result of AI analysis on a market or signal."""
+class LLMResult:
+    """Structured output from an LLM invocation."""
     reasoning: str
-    confidence: float  # 0-1
+    confidence: float
     recommendation: Optional[str] = None
     risk_factors: List[str] = field(default_factory=list)
     raw_response: str = ""
@@ -27,7 +26,6 @@ class AIAnalysis:
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "reasoning": self.reasoning,
             "confidence": self.confidence,
@@ -42,19 +40,19 @@ class AIAnalysis:
 
 
 @dataclass
-class AnomalyReport:
-    """Report of detected market anomaly."""
+class AnomalyFlag:
+    """Flagged market anomaly detected by LLM analysis."""
     market_ticker: str
-    anomaly_type: str  # "price_spike", "volume_anomaly", "spread_unusual"
-    severity: str  # "low", "medium", "high"
+    anomaly_type: str
+    severity: str
     description: str
     detected_at: datetime = field(default_factory=datetime.utcnow)
     ai_analysis: Optional[str] = None
 
 
 @dataclass
-class TradeRecommendation:
-    """AI-generated trade recommendation."""
+class PositionAdvice:
+    """LLM-generated recommendation on a specific position."""
     signal_ticker: str
     should_trade: bool
     recommended_size: Optional[float] = None
@@ -64,16 +62,15 @@ class TradeRecommendation:
     caveats: List[str] = field(default_factory=list)
 
 
-class BaseAIClient(ABC):
-    """Abstract base class for AI clients."""
+class BaseLLMClient(ABC):
+    """Interface for LLM provider clients."""
 
     @abstractmethod
     async def analyze_signal(
         self,
         signal_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None
-    ) -> AIAnalysis:
-        """Analyze a trading signal and provide reasoning."""
+    ) -> LLMResult:
         pass
 
     @abstractmethod
@@ -82,20 +79,17 @@ class BaseAIClient(ABC):
         title: str,
         description: str = ""
     ) -> tuple[str, float]:
-        """Classify a market into a category."""
         pass
 
     @abstractmethod
     async def detect_anomalies(
         self,
         markets: List[Dict[str, Any]]
-    ) -> List[AnomalyReport]:
-        """Detect anomalies in market data."""
+    ) -> List[AnomalyFlag]:
         pass
 
 
-def create_signal_prompt(signal_data: Dict[str, Any], context: Dict[str, Any] = None) -> str:
-    """Create a prompt for signal analysis."""
+def build_signal_prompt(signal_data: Dict[str, Any], context: Dict[str, Any] = None) -> str:
     prompt = f"""Analyze this prediction market trading signal:
 
 Market: {signal_data.get('market_title', 'Unknown')}
@@ -139,8 +133,7 @@ Be concise and actionable."""
     return prompt
 
 
-def create_classification_prompt(title: str, description: str = "") -> str:
-    """Create a prompt for market classification."""
+def build_classification_prompt(title: str, description: str = "") -> str:
     return f"""Classify this prediction market into one category:
 
 Title: {title}
