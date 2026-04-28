@@ -133,12 +133,12 @@ export function Terminal({ isRunning, lastRun, onStart, onStop, onScan }: Props)
 
   const getTypeColor = (type: LogEntry['type']) => {
     switch (type) {
-      case 'success': return 'text-green-500'
-      case 'error': return 'text-red-500'
-      case 'warning': return 'text-amber-500'
-      case 'data': return 'text-blue-500'
-      case 'trade': return 'text-purple-500'
-      default: return 'text-neutral-400'
+      case 'success': return 'text-emerald-400'
+      case 'error': return 'text-rose-400'
+      case 'warning': return 'text-amber-400'
+      case 'data': return 'text-indigo-400'
+      case 'trade': return 'text-violet-400'
+      default: return 'text-slate-400'
     }
   }
 
@@ -156,26 +156,21 @@ export function Terminal({ isRunning, lastRun, onStart, onStop, onScan }: Props)
   return (
     <div className="terminal h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-indigo-500/10">
         <div className="flex items-center gap-2">
-          <div className="flex gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
-            <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
-          </div>
-          <span className="text-[10px] text-neutral-500 uppercase tracking-wider ml-2">System Log</span>
+          <span className="text-xs text-slate-400 font-medium">System Log</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <div className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-amber-500'}`} />
-            <span className="text-[10px] text-neutral-600">
-              {wsConnected ? 'WS' : 'POLL'}
+            <div className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.4)]' : 'bg-amber-400'}`} />
+            <span className="text-[11px] text-slate-500 font-light">
+              {wsConnected ? 'WS' : 'Poll'}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
             {isRunning && <div className="live-dot" />}
-            <span className="text-[10px] text-neutral-600">
-              {isRunning ? 'LIVE' : 'IDLE'}
+            <span className="text-[11px] text-slate-500 font-light">
+              {isRunning ? 'Live' : 'Idle'}
             </span>
           </div>
         </div>
@@ -184,14 +179,14 @@ export function Terminal({ isRunning, lastRun, onStart, onStop, onScan }: Props)
       {/* Log content */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-0.5 min-h-0">
         {logs.length === 0 ? (
-          <div className="text-neutral-600 text-xs">Waiting for events...</div>
+          <div className="text-slate-500 text-xs font-light">Waiting for events...</div>
         ) : (
           logs.map((log, i) => (
             <div key={i} className="flex gap-2 text-xs leading-relaxed">
-              <span className="text-neutral-600 tabular-nums shrink-0">
+              <span className="text-slate-600 tabular-nums shrink-0" style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
                 {formatTime(log.timestamp)}
               </span>
-              <span className={`shrink-0 ${getTypeColor(log.type)}`}>
+              <span className={`shrink-0 ${getTypeColor(log.type)}`} style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
                 {getTypePrefix(log.type)}
               </span>
               <span className={getTypeColor(log.type)}>
@@ -203,24 +198,24 @@ export function Terminal({ isRunning, lastRun, onStart, onStop, onScan }: Props)
 
         {/* Cursor line */}
         <div className="flex gap-2 text-xs">
-          <span className="text-neutral-600 tabular-nums">
+          <span className="text-slate-600 tabular-nums" style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
             {formatTime(new Date().toISOString())}
           </span>
-          <span className="text-green-500">{'>'}</span>
-          <span className={`text-green-500 ${cursorVisible ? 'opacity-100' : 'opacity-0'}`}>_</span>
+          <span className="text-indigo-400">{'>'}</span>
+          <span className={`text-indigo-400 ${cursorVisible ? 'opacity-100' : 'opacity-0'}`}>_</span>
         </div>
       </div>
 
       {/* Footer with controls */}
-      <div className="px-3 py-2 border-t border-neutral-800 flex justify-between items-center">
+      <div className="px-3 py-1.5 border-t border-indigo-500/10 flex justify-between items-center">
         <div className="flex items-center gap-2">
           {onStart && onStop && (
             <button
               onClick={isRunning ? onStop : onStart}
-              className={`flex items-center gap-1.5 px-2 py-1 text-[10px] uppercase tracking-wider border transition-colors ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md border transition-all ${
                 isRunning
-                  ? 'border-amber-500/30 text-amber-500 hover:bg-amber-500/10'
-                  : 'border-green-500/30 text-green-500 hover:bg-green-500/10'
+                  ? 'border-amber-400/20 text-amber-400 hover:bg-amber-400/10'
+                  : 'border-emerald-400/20 text-emerald-400 hover:bg-emerald-400/10'
               }`}
             >
               {isRunning ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
@@ -230,7 +225,7 @@ export function Terminal({ isRunning, lastRun, onStart, onStop, onScan }: Props)
           {onScan && (
             <button
               onClick={onScan}
-              className="flex items-center gap-1.5 px-2 py-1 text-[10px] uppercase tracking-wider border border-blue-500/30 text-blue-500 hover:bg-blue-500/10 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md border border-indigo-400/20 text-indigo-400 hover:bg-indigo-400/10 transition-all"
             >
               <RefreshCw className="w-3 h-3" />
               Scan
@@ -238,10 +233,10 @@ export function Terminal({ isRunning, lastRun, onStart, onStop, onScan }: Props)
           )}
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-[10px] text-neutral-600">
+          <span className="text-[11px] text-slate-500 font-light">
             {lastRun ? `Last: ${formatTime(lastRun)}` : 'No scans'}
           </span>
-          <span className="text-[10px] text-neutral-600 tabular-nums">
+          <span className="text-[11px] text-slate-500 tabular-nums font-light">
             {logs.length} entries
           </span>
         </div>

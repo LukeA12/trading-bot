@@ -8,7 +8,7 @@ interface Props {
 
 function AgreementBar({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(100, value * 100))
-  const color = value > 0.7 ? '#22c55e' : value > 0.5 ? '#d97706' : '#dc2626'
+  const color = value > 0.7 ? '#34d399' : value > 0.5 ? '#f59e0b' : '#f43f5e'
   return (
     <div className="edge-bar w-12">
       <div className="edge-fill" style={{ width: `${pct}%`, backgroundColor: color }} />
@@ -19,7 +19,7 @@ function AgreementBar({ value }: { value: number }) {
 export function WeatherPanel({ forecasts, signals }: Props) {
   if (forecasts.length === 0 && signals.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-neutral-600 text-[10px]">
+      <div className="h-full flex items-center justify-center text-slate-500 text-xs">
         No weather data
       </div>
     )
@@ -45,31 +45,31 @@ export function WeatherPanel({ forecasts, signals }: Props) {
           <div
             key={f.city_key}
             className={`flex items-center gap-2 px-2 py-1.5 ${
-              actionable.length > 0 ? 'border-l-2 border-l-green-500 bg-green-500/5' : 'border-l-2 border-l-transparent'
+              actionable.length > 0 ? 'border-l-2 border-l-emerald-400 bg-emerald-400/5' : 'border-l-2 border-l-transparent'
             }`}
           >
             <div className="w-12 shrink-0">
-              <div className="text-[10px] font-medium text-neutral-300">{f.city_name}</div>
+              <div className="text-[11px] font-medium text-slate-300">{f.city_name}</div>
             </div>
-            <div className="flex-1 flex items-center gap-3 text-[10px] tabular-nums">
-              <span className="text-neutral-300">
+            <div className="flex-1 flex items-center gap-3 text-[11px] tabular-nums">
+              <span className="text-slate-300">
                 {f.mean_high.toFixed(0)}F
-                <span className="text-neutral-600 ml-0.5">+/-{f.std_high.toFixed(0)}</span>
+                <span className="text-slate-500 ml-0.5">+/-{f.std_high.toFixed(0)}</span>
               </span>
               <AgreementBar value={f.ensemble_agreement} />
-              <span className={`${f.ensemble_agreement > 0.7 ? 'text-green-500' : 'text-amber-500'}`}>
+              <span className={`${f.ensemble_agreement > 0.7 ? 'text-emerald-400' : 'text-amber-400'}`}>
                 {(f.ensemble_agreement * 100).toFixed(0)}%
               </span>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               {bestEdge && (
-                <span className={`text-[10px] tabular-nums ${bestEdge.edge > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                <span className={`text-[11px] tabular-nums ${bestEdge.edge > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {bestEdge.edge > 0 ? '+' : ''}{(bestEdge.edge * 100).toFixed(1)}%
                 </span>
               )}
               {citySignals.length > 0 && citySignals[0].platform && (
                 <span className={`platform-badge ${
-                  platformStyles[citySignals[0].platform.toLowerCase()]?.badge || 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                  platformStyles[citySignals[0].platform.toLowerCase()]?.badge || 'bg-slate-700/30 text-slate-400 border-slate-600/20'
                 }`}>
                   {platformStyles[citySignals[0].platform.toLowerCase()]?.icon || '?'}
                 </span>
