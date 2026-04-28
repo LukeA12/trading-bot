@@ -89,7 +89,6 @@ export function EdgeDistribution({ btcSignals, weatherSignals }: Props) {
             iconSize={8}
             wrapperStyle={{ fontSize: '9px', fontFamily: 'JetBrains Mono' }}
           />
-          <Bar dataKey="BTC" stackId="a" fill="#d97706" radius={[0, 0, 0, 0]} />
           <Bar dataKey="WX" stackId="a" fill="#06b6d4" radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>

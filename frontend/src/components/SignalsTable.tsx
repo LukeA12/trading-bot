@@ -63,28 +63,12 @@ export function SignalsTable({ signals, weatherSignals, onSimulateTrade, isSimul
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
 
   const unified: UnifiedSignal[] = useMemo(() => {
-    const btc: UnifiedSignal[] = signals.map(s => ({
-      key: `btc-${s.market_ticker}`,
-      ticker: s.market_ticker,
-      title: (s.event_slug || s.market_ticker).replace('btc-updown-5m-', ''),
-      platform: s.platform || 'polymarket',
-      category: 'BTC',
-      direction: s.direction,
-      edge: s.edge,
-      modelProb: s.model_probability,
-      marketProb: s.market_probability,
-      confidence: s.confidence,
-      suggestedSize: s.suggested_size,
-      reasoning: s.reasoning,
-      actionable: s.actionable,
-    }))
-
     const wx: UnifiedSignal[] = weatherSignals.map(s => ({
       key: `wx-${s.market_id}`,
       ticker: s.market_id,
       title: `${s.city_name} ${s.metric} ${s.direction} ${s.threshold_f}F`,
       platform: s.platform || 'kalshi',
-      category: 'WX',
+      category: 'WX' as const,
       direction: s.direction,
       edge: s.edge,
       modelProb: s.model_probability,
@@ -95,7 +79,24 @@ export function SignalsTable({ signals, weatherSignals, onSimulateTrade, isSimul
       actionable: s.actionable,
     }))
 
-    return [...btc, ...wx]
+    // Include any BTC signals passed in (kept for API compatibility)
+    const btc: UnifiedSignal[] = signals.map(s => ({
+      key: `btc-${s.market_ticker}`,
+      ticker: s.market_ticker,
+      title: (s.event_slug || s.market_ticker).replace('btc-updown-5m-', ''),
+      platform: s.platform || 'polymarket',
+      category: 'BTC' as const,
+      direction: s.direction,
+      edge: s.edge,
+      modelProb: s.model_probability,
+      marketProb: s.market_probability,
+      confidence: s.confidence,
+      suggestedSize: s.suggested_size,
+      reasoning: s.reasoning,
+      actionable: s.actionable,
+    }))
+
+    return [...wx, ...btc]
   }, [signals, weatherSignals])
 
   const handleSort = (key: SortKey) => {
@@ -226,11 +227,11 @@ export function SignalsTable({ signals, weatherSignals, onSimulateTrade, isSimul
                   {sig.suggestedSize > 0 ? `$${sig.suggestedSize.toFixed(0)}` : '-'}
                 </td>
                 <td className="py-1 px-1.5 text-right">
-                  {sig.actionable && sig.category === 'BTC' && (
+                  {sig.actionable && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onSimulateTrade(sig.ticker) }}
                       disabled={isSimulating}
-                      className="px-1.5 py-0.5 text-[8px] font-medium uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 disabled:opacity-50"
+                      className="px-1.5 py-0.5 text-[8px] font-medium uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 disabled:opacity-50"
                     >
                       Trade
                     </button>
