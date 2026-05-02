@@ -194,10 +194,25 @@ async def wx_cycle():
 
         opps = await evaluate_wx_markets()
 
+        def _dedupe_by_city_date(opps_list):
+            """Keep only the highest-edge opportunity per (city, date, metric).
+            Prevents correlated bets — all range/threshold contracts for the same
+            city+date+metric (high or low) depend on the same temperature realization."""
+            seen = {}
+            for o in sorted(opps_list, key=lambda x: abs(x.edge), reverse=True):
+                key = (o.market.city_key, o.market.target_date, o.market.metric)
+                if key not in seen:
+                    seen[key] = o
+            return list(seen.values())
+
         # Strategy 1 & 2 use the same threshold
-        viable_s1 = [o for o in opps if abs(o.edge) >= STRATEGY_1_THRESHOLD]
+        viable_s1 = _dedupe_by_city_date(
+            [o for o in opps if abs(o.edge) >= STRATEGY_1_THRESHOLD]
+        )
         # Strategy 3 uses 15%+
-        viable_s3 = [o for o in opps if should_take_trade_s3(o.edge)]
+        viable_s3 = _dedupe_by_city_date(
+            [o for o in opps if should_take_trade_s3(o.edge)]
+        )
 
         record_activity("data", f"Weather: {len(opps)} signals, S1/S2={len(viable_s1)}, S3={len(viable_s3)}", {
             "total_signals": len(opps),

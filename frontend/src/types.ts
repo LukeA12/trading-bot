@@ -67,6 +67,8 @@ export interface Trade {
   pnl: number | null
   strategy: number
   edge_at_entry: number | null
+  model_probability: number | null
+  market_price_at_entry: number | null
 }
 
 export interface BotStats {

@@ -84,6 +84,8 @@ export function TradesTable({ trades }: Props) {
           <th className="py-1.5 px-1.5 font-medium text-center">Dir</th>
           <th className="py-1.5 px-1.5 font-medium text-right">Entry</th>
           <th className="py-1.5 px-1.5 font-medium text-right">Edge</th>
+          <th className="py-1.5 px-1.5 font-medium text-right">Model</th>
+          <th className="py-1.5 px-1.5 font-medium text-right">Mkt</th>
           <th
             className="py-1.5 px-1.5 font-medium text-right cursor-pointer hover:text-slate-300 transition-colors"
             onClick={() => handleSort('size')}
@@ -166,6 +168,24 @@ export function TradesTable({ trades }: Props) {
                   {trade.edge_at_entry != null ? (
                     <span className={`tabular-nums ${Math.abs(trade.edge_at_entry) >= 0.15 ? 'text-purple-400' : 'text-slate-400'}`}>
                       {(trade.edge_at_entry * 100).toFixed(1)}%
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">-</span>
+                  )}
+                </td>
+                <td className="py-1 px-1.5 text-right">
+                  {trade.model_probability != null ? (
+                    <span className="tabular-nums text-indigo-300">
+                      {(trade.model_probability * 100).toFixed(0)}%
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">-</span>
+                  )}
+                </td>
+                <td className="py-1 px-1.5 text-right">
+                  {trade.market_price_at_entry != null ? (
+                    <span className="tabular-nums text-slate-400">
+                      {(trade.market_price_at_entry * 100).toFixed(0)}¢
                     </span>
                   ) : (
                     <span className="text-slate-600">-</span>

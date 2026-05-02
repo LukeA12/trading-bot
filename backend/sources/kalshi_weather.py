@@ -110,7 +110,9 @@ async def load_kalshi_temp_contracts(
                     if not parsed:
                         continue
 
-                    if parsed["target_date"] < today:
+                    # Skip same-day contracts — market has live observations,
+                    # our ensemble is a stale morning forecast
+                    if parsed["target_date"] <= today:
                         continue
 
                     yes_p = (m.get("yes_ask") or 0) / 100.0
@@ -121,7 +123,7 @@ async def load_kalshi_temp_contracts(
                     if no_p <= 0:
                         no_p = 1.0 - yes_p
 
-                    if yes_p > 0.98 or yes_p < 0.02:
+                    if yes_p > 0.98 or yes_p < 0.08:
                         continue
 
                     vol = float(m.get("volume", 0) or 0)

@@ -50,7 +50,15 @@ async def assess_wx_market(contract: TempContract) -> Optional[WxOpportunity]:
         return None
 
     # Compute model probability for YES outcome
-    if contract.metric == "high":
+    members = ensemble.member_highs if contract.metric == "high" else ensemble.member_lows
+
+    if contract.is_range_contract:
+        # Range contract: "between X-Y°F" — compute P(low <= temp <= high)
+        lo = contract.range_low_f
+        hi = contract.range_high_f
+        in_band = sum(1 for m in members if lo <= m <= hi)
+        model_yes = in_band / len(members) if members else 0.5
+    elif contract.metric == "high":
         if contract.direction == "above":
             model_yes = ensemble.probability_high_above(contract.threshold_f)
         else:
@@ -68,15 +76,20 @@ async def assess_wx_market(contract: TempContract) -> Optional[WxOpportunity]:
     adv, dir_raw = compute_advantage(model_yes, mkt_yes)
     direction = "yes" if dir_raw == "up" else "no"
 
-    # Entry price filter
+    # Entry price filter: skip if entry is above max OR below min
     entry_px = contract.yes_price if direction == "yes" else contract.no_price
-    if entry_px > cfg.WEATHER_MAX_ENTRY_PRICE:
+    if entry_px > cfg.WEATHER_MAX_ENTRY_PRICE or entry_px < 0.08:
         adv = 0.0
 
     # Confidence from ensemble agreement
-    members = ensemble.member_highs if contract.metric == "high" else ensemble.member_lows
-    above = sum(1 for m in members if m > contract.threshold_f)
-    agreement = max(above, len(members) - above) / len(members)
+    if contract.is_range_contract:
+        lo = contract.range_low_f
+        hi = contract.range_high_f
+        in_band = sum(1 for m in members if lo <= m <= hi)
+        agreement = in_band / len(members) if members else 0.5
+    else:
+        above = sum(1 for m in members if m > contract.threshold_f)
+        agreement = max(above, len(members) - above) / len(members)
     conf = min(0.9, agreement)
 
     # Position sizing

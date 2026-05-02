@@ -128,6 +128,8 @@ class PositionDTO(BaseModel):
     pnl: Optional[float]
     strategy: int = 1
     edge_at_entry: Optional[float] = None
+    model_probability: Optional[float] = None
+    market_price_at_entry: Optional[float] = None
 
 
 class PortfolioDTO(BaseModel):
@@ -929,6 +931,8 @@ async def full_dashboard(session: Session = Depends(db_session)):
             pnl=r.pnl,
             strategy=r.strategy or 1,
             edge_at_entry=r.edge_at_entry,
+            model_probability=r.model_probability,
+            market_price_at_entry=r.market_price_at_entry,
         )
         for r in rows
     ]
