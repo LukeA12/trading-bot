@@ -79,8 +79,11 @@ export function TradesTable({ trades }: Props) {
               St <SortIcon column="result" />
             </div>
           </th>
+          <th className="py-1.5 px-1.5 font-medium">Str</th>
           <th className="py-1.5 px-1.5 font-medium">Market</th>
           <th className="py-1.5 px-1.5 font-medium text-center">Dir</th>
+          <th className="py-1.5 px-1.5 font-medium text-right">Entry</th>
+          <th className="py-1.5 px-1.5 font-medium text-right">Edge</th>
           <th
             className="py-1.5 px-1.5 font-medium text-right cursor-pointer hover:text-slate-300 transition-colors"
             onClick={() => handleSort('size')}
@@ -138,14 +141,35 @@ export function TradesTable({ trades }: Props) {
                   </span>
                 </td>
                 <td className="py-1 px-1.5">
-                  <span className="text-slate-400 truncate block max-w-[100px]" title={trade.event_slug || trade.market_ticker}>
+                  <span className={`text-[10px] font-semibold rounded px-1 py-0.5 ${
+                    trade.strategy === 3 ? 'text-purple-400 bg-purple-400/10' :
+                    trade.strategy === 2 ? 'text-blue-400 bg-blue-400/10' :
+                    'text-slate-400 bg-slate-400/10'
+                  }`}>
+                    S{trade.strategy || 1}
+                  </span>
+                </td>
+                <td className="py-1 px-1.5">
+                  <span className="text-slate-400 truncate block max-w-[90px]" title={trade.event_slug || trade.market_ticker}>
                     {(trade.event_slug || trade.market_ticker).replace('btc-updown-5m-', '')}
                   </span>
                 </td>
                 <td className="py-1 px-1.5 text-center">
-                  <span className={`text-[10px] font-semibold ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <span className={`text-[10px] font-semibold ${isUp || trade.direction === 'yes' ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {trade.direction}
                   </span>
+                </td>
+                <td className="py-1 px-1.5 text-right text-slate-300 tabular-nums">
+                  {(trade.entry_price * 100).toFixed(0)}¢
+                </td>
+                <td className="py-1 px-1.5 text-right">
+                  {trade.edge_at_entry != null ? (
+                    <span className={`tabular-nums ${Math.abs(trade.edge_at_entry) >= 0.15 ? 'text-purple-400' : 'text-slate-400'}`}>
+                      {(trade.edge_at_entry * 100).toFixed(1)}%
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">-</span>
+                  )}
                 </td>
                 <td className="py-1 px-1.5 text-right text-slate-300 tabular-nums">
                   ${trade.size.toFixed(0)}

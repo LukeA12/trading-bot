@@ -126,6 +126,8 @@ class PositionDTO(BaseModel):
     settled: bool
     result: str
     pnl: Optional[float]
+    strategy: int = 1
+    edge_at_entry: Optional[float] = None
 
 
 class PortfolioDTO(BaseModel):
@@ -210,6 +212,7 @@ class DashboardDTO(BaseModel):
     active_signals: List[OpportunityDTO]
     recent_trades: List[PositionDTO]
     equity_curve: List[dict]
+    equity_by_strategy: dict = {}
     calibration: Optional[CalSummaryDTO] = None
     weather_signals: List[WxSignalDTO] = []
     weather_forecasts: List[WxForecastDTO] = []
@@ -923,7 +926,9 @@ async def full_dashboard(session: Session = Depends(db_session)):
             timestamp=r.timestamp,
             settled=r.settled,
             result=r.result,
-            pnl=r.pnl
+            pnl=r.pnl,
+            strategy=r.strategy or 1,
+            edge_at_entry=r.edge_at_entry,
         )
         for r in rows
     ]
@@ -940,6 +945,21 @@ async def full_dashboard(session: Session = Depends(db_session)):
                 "pnl": cumulative,
                 "bankroll": cfg.INITIAL_BANKROLL + cumulative
             })
+
+    # Per-strategy equity curves
+    equity_by_strategy = {}
+    for strat_id in [1, 2, 3]:
+        strat_rows = [r for r in settled_rows if (r.strategy or 1) == strat_id and r.pnl is not None]
+        cum = 0
+        strat_curve = []
+        for pos in strat_rows:
+            cum += pos.pnl
+            strat_curve.append({
+                "timestamp": pos.timestamp.isoformat(),
+                "pnl": cum,
+                "bankroll": cfg.INITIAL_BANKROLL + cum
+            })
+        equity_by_strategy[str(strat_id)] = strat_curve
 
     # Calibration
     cal = _compute_cal_summary(session)
@@ -983,6 +1003,7 @@ async def full_dashboard(session: Session = Depends(db_session)):
         active_signals=signals,
         recent_trades=recent,
         equity_curve=curve,
+        equity_by_strategy=equity_by_strategy,
         calibration=cal,
         weather_signals=wx_signals,
         weather_forecasts=wx_forecasts,

@@ -178,22 +178,34 @@ async def crypto_cycle():
 
 async def wx_cycle():
     """
-    Periodic job: scan weather temperature contracts, generate signals, open positions.
+    Periodic job: scan weather temperature contracts, open positions for all 3 strategies.
+    Strategy 1: Baseline — threshold edge, 1 unit, hold to settlement.
+    Strategy 2: Same entry as S1 + early exit logic (managed in wx_exit_cycle).
+    Strategy 3: 15%+ edge only, tiered sizing (1/2/5 units), hold to settlement.
     """
     record_activity("info", "Scanning weather temperature markets...")
 
     try:
         from backend.engine.wx_analysis import evaluate_wx_markets
+        from backend.engine.wx_strategies import (
+            STRATEGY_1_THRESHOLD, STRATEGY_3_THRESHOLD,
+            BASE_UNIT, compute_strategy_3_size, should_take_trade_s3,
+        )
 
         opps = await evaluate_wx_markets()
-        viable = [o for o in opps if o.passes_threshold]
 
-        record_activity("data", f"Weather: {len(opps)} signals, {len(viable)} actionable", {
+        # Strategy 1 & 2 use the same threshold
+        viable_s1 = [o for o in opps if abs(o.edge) >= STRATEGY_1_THRESHOLD]
+        # Strategy 3 uses 15%+
+        viable_s3 = [o for o in opps if should_take_trade_s3(o.edge)]
+
+        record_activity("data", f"Weather: {len(opps)} signals, S1/S2={len(viable_s1)}, S3={len(viable_s3)}", {
             "total_signals": len(opps),
-            "actionable": len(viable),
+            "s1_actionable": len(viable_s1),
+            "s3_actionable": len(viable_s3),
         })
 
-        if not viable:
+        if not viable_s1 and not viable_s3:
             record_activity("info", "No actionable weather signals")
             return
 
@@ -208,44 +220,81 @@ async def wx_cycle():
                 record_activity("info", "Bot is paused, skipping weather trades")
                 return
 
-            MAX_PER_SCAN = 3
-            MIN_SIZE = 10
-            MAX_WX_ALLOC = 500.0
-
-            wx_pending = session.query(func.coalesce(func.sum(Position.size), 0.0)).filter(
-                Position.settled == False,
-                Position.market_type == "weather",
-            ).scalar()
-
-            if wx_pending >= MAX_WX_ALLOC:
-                record_activity("info", f"Weather allocation limit reached: ${wx_pending:.0f}/${MAX_WX_ALLOC:.0f}")
-                return
+            MAX_PER_STRATEGY = 3
 
             opened = 0
-            for opp in viable[:MAX_PER_SCAN]:
+
+            # --- Strategy 1 & 2: same entry, 1 unit each ---
+            for opp in viable_s1[:MAX_PER_STRATEGY]:
+                entry_px = opp.market.yes_price if opp.direction == "yes" else opp.market.no_price
+
+                for strategy_id in [1, 2]:
+                    existing = session.query(Position).filter(
+                        Position.market_ticker == opp.market.market_id,
+                        Position.strategy == strategy_id,
+                        Position.settled == False,
+                    ).first()
+                    if existing:
+                        continue
+
+                    pos = Position(
+                        market_ticker=opp.market.market_id,
+                        platform=opp.market.platform,
+                        event_slug=opp.market.slug,
+                        market_type="weather",
+                        direction=opp.direction,
+                        entry_price=entry_px,
+                        size=BASE_UNIT,
+                        model_probability=opp.model_probability,
+                        market_price_at_entry=opp.market_probability,
+                        edge_at_entry=opp.edge,
+                        strategy=strategy_id,
+                    )
+                    session.add(pos)
+                    session.flush()
+
+                    linked = session.query(Opportunity).filter(
+                        Opportunity.market_ticker == opp.market.market_id,
+                        Opportunity.market_type == "weather",
+                        Opportunity.executed == False,
+                    ).order_by(Opportunity.timestamp.desc()).first()
+                    if linked:
+                        linked.executed = True
+                        pos.signal_id = linked.id
+
+                    portfolio.total_trades += 1
+                    opened += 1
+
+                    record_activity("trade",
+                        f"WX S{strategy_id} {opp.market.city_name}: {opp.direction.upper()} "
+                        f"${BASE_UNIT:.0f} @ {entry_px:.0%} | edge {opp.edge:+.1%}",
+                        {
+                            "strategy": strategy_id,
+                            "slug": opp.market.slug,
+                            "direction": opp.direction,
+                            "size": BASE_UNIT,
+                            "edge": opp.edge,
+                            "entry_price": entry_px,
+                            "city": opp.market.city_name,
+                        }
+                    )
+
+            # --- Strategy 3: 15%+ edge, tiered sizing ---
+            for opp in viable_s3[:MAX_PER_STRATEGY]:
                 existing = session.query(Position).filter(
                     Position.market_ticker == opp.market.market_id,
+                    Position.strategy == 3,
                     Position.settled == False,
                 ).first()
-
                 if existing:
                     continue
 
-                pos_size = min(opp.suggested_size, cfg.WEATHER_MAX_TRADE_SIZE)
-                pos_size = max(pos_size, MIN_SIZE)
-
-                if portfolio.bankroll < MIN_SIZE:
-                    record_activity("warning", f"Bankroll too low: ${portfolio.bankroll:.2f}")
-                    break
-
-                if opened >= MAX_PER_SCAN:
-                    break
-
                 entry_px = opp.market.yes_price if opp.direction == "yes" else opp.market.no_price
+                pos_size = compute_strategy_3_size(opp.edge)
 
                 pos = Position(
                     market_ticker=opp.market.market_id,
-                    platform="polymarket",
+                    platform=opp.market.platform,
                     event_slug=opp.market.slug,
                     market_type="weather",
                     direction=opp.direction,
@@ -254,8 +303,8 @@ async def wx_cycle():
                     model_probability=opp.model_probability,
                     market_price_at_entry=opp.market_probability,
                     edge_at_entry=opp.edge,
+                    strategy=3,
                 )
-
                 session.add(pos)
                 session.flush()
 
@@ -271,11 +320,12 @@ async def wx_cycle():
                 portfolio.total_trades += 1
                 opened += 1
 
+                units = pos_size / BASE_UNIT
                 record_activity("trade",
-                    f"WX {opp.market.city_name}: {opp.direction.upper()} "
-                    f"${pos_size:.0f} @ {entry_px:.0%} | "
-                    f"{opp.market.metric} {opp.market.direction} {opp.market.threshold_f:.0f}F",
+                    f"WX S3 {opp.market.city_name}: {opp.direction.upper()} "
+                    f"${pos_size:.0f} ({units:.0f}u) @ {entry_px:.0%} | edge {opp.edge:+.1%}",
                     {
+                        "strategy": 3,
                         "slug": opp.market.slug,
                         "direction": opp.direction,
                         "size": pos_size,
@@ -289,7 +339,7 @@ async def wx_cycle():
             session.commit()
 
             if opened > 0:
-                record_activity("success", f"Executed {opened} weather trade(s)")
+                record_activity("success", f"Executed {opened} weather trade(s) across strategies")
             else:
                 record_activity("info", "No new weather trades executed")
 
@@ -299,6 +349,104 @@ async def wx_cycle():
     except Exception as exc:
         record_activity("error", f"Weather scan error: {str(exc)}")
         logger.exception("Error in wx_cycle")
+
+
+async def wx_exit_cycle():
+    """
+    Strategy 2 early exit logic — runs periodically to check if S2 positions
+    should be closed before settlement based on current market price.
+    """
+    try:
+        from backend.engine.wx_strategies import (
+            EARLY_EXIT_ENTRY_THRESHOLD,
+            EARLY_EXIT_MIN_HOURS_REMAINING,
+            EARLY_EXIT_HOLD_ENTRY,
+            EARLY_EXIT_HOLD_AGREEMENT,
+            NO_EXIT_HOURS_REMAINING,
+        )
+        import httpx
+        from datetime import date
+
+        session = DbSession()
+        try:
+            s2_positions = session.query(Position).filter(
+                Position.strategy == 2,
+                Position.settled == False,
+                Position.market_type == "weather",
+            ).all()
+
+            if not s2_positions:
+                return
+
+            for pos in s2_positions:
+                # Rule: Entry >= 50¢ → hold to settlement
+                if pos.entry_price >= EARLY_EXIT_HOLD_ENTRY:
+                    continue
+
+                # Rule: Entry < 45¢ → consider early exit
+                if pos.entry_price >= EARLY_EXIT_ENTRY_THRESHOLD:
+                    continue
+
+                # Estimate hours remaining (weather contracts settle same day ~midnight UTC)
+                now = datetime.utcnow()
+                # Assume settlement at end of target date (approx 23:59 UTC)
+                settle_hour = now.replace(hour=23, minute=59, second=0)
+                hours_left = (settle_hour - now).total_seconds() / 3600
+
+                # Rule: Never exit within 2 hours of settlement
+                if hours_left < NO_EXIT_HOURS_REMAINING:
+                    continue
+
+                # Rule: Only exit if 4+ hours remain
+                if hours_left < EARLY_EXIT_MIN_HOURS_REMAINING:
+                    continue
+
+                # Check current market price
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as http:
+                        resp = await http.get(
+                            f"https://gamma-api.polymarket.com/markets/{pos.market_ticker}"
+                        )
+                        if resp.status_code != 200:
+                            continue
+                        mkt = resp.json()
+                        prices = mkt.get("outcomePrices", [])
+                        if isinstance(prices, str):
+                            import json
+                            prices = json.loads(prices)
+                        if not prices or len(prices) < 2:
+                            continue
+
+                        current_yes = float(prices[0])
+                        current_no = float(prices[1])
+                        current_px = current_yes if pos.direction == "yes" else current_no
+                except Exception:
+                    continue
+
+                # Exit if current price has reached our model's fair value (edge closed)
+                model_fair = pos.model_probability if pos.direction == "yes" else (1 - pos.model_probability)
+                if current_px >= model_fair:
+                    # Simulate early exit: PnL = (current_price - entry_price) * contracts
+                    pnl = (current_px - pos.entry_price) * pos.size
+                    pos.settled = True
+                    pos.settlement_time = now
+                    pos.settlement_value = current_px
+                    pos.result = "win" if pnl > 0 else "loss"
+                    pos.pnl = pnl
+
+                    record_activity("trade",
+                        f"WX S2 EARLY EXIT: {pos.event_slug} | "
+                        f"entry={pos.entry_price:.0%} → exit={current_px:.0%} | PnL ${pnl:.2f}",
+                        {"strategy": 2, "pnl": pnl, "exit_type": "early"}
+                    )
+
+            session.commit()
+        finally:
+            session.close()
+
+    except Exception as exc:
+        record_activity("error", f"S2 exit check error: {str(exc)}")
+        logger.exception("Error in wx_exit_cycle")
 
 
 async def resolution_cycle():
@@ -419,6 +567,14 @@ def launch_automation():
             wx_cycle,
             IntervalTrigger(seconds=wx_scan_sec),
             id="weather_scan",
+            replace_existing=True,
+            max_instances=1,
+        )
+
+        _scheduler.add_job(
+            wx_exit_cycle,
+            IntervalTrigger(minutes=10),
+            id="weather_s2_exit",
             replace_existing=True,
             max_instances=1,
         )

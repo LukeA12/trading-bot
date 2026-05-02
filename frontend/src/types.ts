@@ -65,6 +65,8 @@ export interface Trade {
   settled: boolean
   result: string
   pnl: number | null
+  strategy: number
+  edge_at_entry: number | null
 }
 
 export interface BotStats {
@@ -133,6 +135,7 @@ export interface DashboardData {
   active_signals: Signal[]
   recent_trades: Trade[]
   equity_curve: EquityPoint[]
+  equity_by_strategy: Record<string, EquityPoint[]>
   calibration: CalibrationSummary | null
   weather_signals: WeatherSignal[]
   weather_forecasts: WeatherForecast[]

@@ -42,6 +42,7 @@ class Position(Base):
     model_probability = Column(Float)
     market_price_at_entry = Column(Float)
     edge_at_entry = Column(Float)
+    strategy = Column(Integer, default=1)
 
 
 class PriceSnapshot(Base):
@@ -169,6 +170,11 @@ def migrate_schema():
         with _engine.connect() as conn:
             with conn.begin():
                 conn.execute(text("ALTER TABLE trades ADD COLUMN market_type VARCHAR DEFAULT 'btc'"))
+
+    if "strategy" not in trade_cols:
+        with _engine.connect() as conn:
+            with conn.begin():
+                conn.execute(text("ALTER TABLE trades ADD COLUMN strategy INTEGER DEFAULT 1"))
 
     try:
         opp_cols = [col["name"] for col in inspector.get_columns("signals")]
