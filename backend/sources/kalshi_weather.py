@@ -71,6 +71,10 @@ async def load_kalshi_temp_contracts(
     Handles cursor-based pagination across city series.
     """
     if not kalshi_configured():
+        logger.info(
+            "Kalshi weather contracts skipped: KALSHI_API_KEY_ID or "
+            "KALSHI_PRIVATE_KEY_PATH not set in .env"
+        )
         return []
 
     connector = KalshiConnector()

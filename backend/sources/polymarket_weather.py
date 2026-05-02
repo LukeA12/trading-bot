@@ -51,7 +51,10 @@ def _parse_temp_title(title: str) -> Optional[dict]:
     """Extract structured parameters from a weather market title string."""
     lower = title.lower()
 
-    if not any(kw in lower for kw in ["temperature", "temp", "°f", "degrees", "high", "low"]):
+    if not any(kw in lower for kw in [
+        "temperature", "temp", "°f", "degrees", "high", "low",
+        "exceed", "forecast", "warming", "cooling", "heat",
+    ]):
         return None
 
     city_key = None
@@ -97,6 +100,8 @@ def _parse_temp_title(title: str) -> Optional[dict]:
 
 def _parse_date_from_text(text: str) -> Optional[date]:
     today = date.today()
+    # Strip ordinal suffixes so "May 5th" and "May 5" both parse
+    text = re.sub(r'(\d+)(?:st|nd|rd|th)\b', r'\1', text)
     month_names = "|".join(MONTH_MAP.keys())
 
     for match in re.finditer(rf'({month_names})\s+(\d{{1,2}})(?:\s*,?\s*(\d{{4}}))?', text):
@@ -131,53 +136,40 @@ async def load_poly_temp_contracts(city_keys: Optional[List[str]] = None) -> Lis
     """
     contracts = []
 
+    seen_ids: set = set()
+
+    def _add_contract(contract):
+        if contract and contract.market_id not in seen_ids:
+            seen_ids.add(contract.market_id)
+            contracts.append(contract)
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as http:
-            for search_term in ["temperature", "weather high", "weather low"]:
+            # tag_slug=weather is the only param the Gamma API actually filters on.
+            # tag=Weather / q=... / slug_contains=... are all silently ignored.
+            # Fetch up to 300 weather events across 3 pages.
+            for offset in [0, 100, 200]:
                 try:
                     resp = await http.get(
                         "https://gamma-api.polymarket.com/events",
                         params={
                             "closed": "false",
                             "limit": 100,
-                            "tag": "Weather",
-                        }
+                            "offset": offset,
+                            "tag_slug": "weather",
+                        },
                     )
                     resp.raise_for_status()
-                    events = resp.json()
-
-                    for event in events:
+                    page = resp.json()
+                    if not page:
+                        break
+                    for event in page:
                         event_slug = event.get("slug", "")
                         for mkt_data in event.get("markets", []):
-                            contract = _extract_poly_temp_contract(mkt_data, event_slug, city_keys)
-                            if contract:
-                                contracts.append(contract)
-
+                            _add_contract(_extract_poly_temp_contract(mkt_data, event_slug, city_keys))
                 except Exception as exc:
-                    logger.debug(f"Temp contract search for '{search_term}' failed: {exc}")
-
-            for slug_pattern in ["weather", "temperature", "temp-"]:
-                try:
-                    resp = await http.get(
-                        "https://gamma-api.polymarket.com/events",
-                        params={
-                            "closed": "false",
-                            "limit": 100,
-                            "slug_contains": slug_pattern,
-                        }
-                    )
-                    resp.raise_for_status()
-                    events = resp.json()
-
-                    for event in events:
-                        event_slug = event.get("slug", "")
-                        for mkt_data in event.get("markets", []):
-                            contract = _extract_poly_temp_contract(mkt_data, event_slug, city_keys)
-                            if contract and not any(c.market_id == contract.market_id for c in contracts):
-                                contracts.append(contract)
-
-                except Exception as exc:
-                    logger.debug(f"Temp slug search for '{slug_pattern}' failed: {exc}")
+                    logger.debug(f"Weather page offset={offset} failed: {exc}")
+                    break
 
     except Exception as exc:
         logger.warning(f"Failed to fetch temperature contracts: {exc}")

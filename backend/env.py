@@ -62,7 +62,7 @@ class AppConfig(BaseSettings):
     WEATHER_ENABLED: bool = True
     WEATHER_SCAN_INTERVAL_SECONDS: int = 300
     WEATHER_SETTLEMENT_INTERVAL_SECONDS: int = 1800
-    WEATHER_MIN_EDGE_THRESHOLD: float = 0.08
+    WEATHER_MIN_EDGE_THRESHOLD: float = 0.04
     WEATHER_MAX_ENTRY_PRICE: float = 0.70
     WEATHER_MAX_TRADE_SIZE: float = 100.0
     WEATHER_CITIES: str = "nyc,chicago,miami,los_angeles,denver"
