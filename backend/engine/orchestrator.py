@@ -387,13 +387,14 @@ def launch_automation():
     scan_sec = cfg.SCAN_INTERVAL_SECONDS
     settle_sec = cfg.SETTLEMENT_INTERVAL_SECONDS
 
-    _scheduler.add_job(
-        crypto_cycle,
-        IntervalTrigger(seconds=scan_sec),
-        id="market_scan",
-        replace_existing=True,
-        max_instances=1
-    )
+    if cfg.BTC_ENABLED:
+        _scheduler.add_job(
+            crypto_cycle,
+            IntervalTrigger(seconds=scan_sec),
+            id="market_scan",
+            replace_existing=True,
+            max_instances=1
+        )
 
     _scheduler.add_job(
         resolution_cycle,
@@ -430,7 +431,8 @@ def launch_automation():
         "weather_enabled": cfg.WEATHER_ENABLED,
     })
 
-    asyncio.create_task(crypto_cycle())
+    if cfg.BTC_ENABLED:
+        asyncio.create_task(crypto_cycle())
 
     if cfg.WEATHER_ENABLED:
         asyncio.create_task(wx_cycle())
@@ -454,6 +456,9 @@ def automation_active() -> bool:
 
 
 async def trigger_scan():
+    if not cfg.BTC_ENABLED:
+        record_activity("info", "BTC trading is disabled (BTC_ENABLED=false)")
+        return
     record_activity("info", "Manual scan triggered")
     await crypto_cycle()
 

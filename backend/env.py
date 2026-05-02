@@ -29,6 +29,7 @@ class AppConfig(BaseSettings):
     AI_DAILY_BUDGET_USD: float = 1.0
 
     # Execution parameters
+    BTC_ENABLED: bool = True
     SIMULATION_MODE: bool = True
     INITIAL_BANKROLL: float = 10000.0
     KELLY_FRACTION: float = 0.15
