@@ -688,10 +688,12 @@ async def weather_contracts():
         return []
 
     try:
-        from backend.sources.polymarket_weather import load_poly_temp_contracts
-
         city_keys = [c.strip() for c in cfg.WEATHER_CITIES.split(",") if c.strip()]
-        contracts = await load_poly_temp_contracts(city_keys)
+        contracts = []
+
+        if cfg.POLYMARKET_ENABLED:
+            from backend.sources.polymarket_weather import load_poly_temp_contracts
+            contracts = await load_poly_temp_contracts(city_keys)
 
         if cfg.KALSHI_ENABLED:
             try:

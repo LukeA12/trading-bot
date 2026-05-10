@@ -58,6 +58,9 @@ class AppConfig(BaseSettings):
     KALSHI_PRIVATE_KEY_PATH: Optional[str] = None
     KALSHI_ENABLED: bool = True
 
+    # Polymarket
+    POLYMARKET_ENABLED: bool = True
+
     # LLM providers
     GROQ_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None

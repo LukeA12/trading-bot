@@ -152,12 +152,15 @@ async def evaluate_wx_markets() -> List[WxOpportunity]:
     contracts = []
 
     # Polymarket
-    try:
-        poly = await load_poly_temp_contracts(city_keys)
-        contracts.extend(poly)
-        logger.info(f"Polymarket: {len(poly)} weather markets")
-    except Exception as exc:
-        logger.error(f"Failed to fetch Polymarket weather markets: {exc}")
+    if cfg.POLYMARKET_ENABLED:
+        try:
+            poly = await load_poly_temp_contracts(city_keys)
+            contracts.extend(poly)
+            logger.info(f"Polymarket: {len(poly)} weather markets")
+        except Exception as exc:
+            logger.error(f"Failed to fetch Polymarket weather markets: {exc}")
+    else:
+        logger.info("Polymarket disabled (POLYMARKET_ENABLED=false)")
 
     # Kalshi
     if cfg.KALSHI_ENABLED:
