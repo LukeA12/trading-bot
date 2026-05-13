@@ -1,4 +1,3 @@
-import { formatDistanceToNow } from 'date-fns'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -205,8 +204,8 @@ export function TradesTable({ trades }: Props) {
                     <span className="text-slate-600">-</span>
                   )}
                 </td>
-                <td className="py-1 px-1.5 text-right text-[10px] text-slate-500 tabular-nums font-light">
-                  {formatDistanceToNow(new Date(trade.timestamp), { addSuffix: false })}
+                <td className="py-1 px-1.5 text-right text-[10px] text-slate-500 tabular-nums font-light whitespace-nowrap">
+                  {(() => { const d = new Date(trade.timestamp.endsWith('Z') ? trade.timestamp : trade.timestamp + 'Z'); return (<><div>{d.toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric' })}</div><div>{d.toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit', hour12: true })}</div></>); })()}
                 </td>
               </motion.tr>
             )

@@ -138,6 +138,7 @@ export interface DashboardData {
   recent_trades: Trade[]
   equity_curve: EquityPoint[]
   equity_by_strategy: Record<string, EquityPoint[]>
+  equity_by_strategy_platform: Record<string, Record<string, EquityPoint[]>>
   calibration: CalibrationSummary | null
   weather_signals: WeatherSignal[]
   weather_forecasts: WeatherForecast[]

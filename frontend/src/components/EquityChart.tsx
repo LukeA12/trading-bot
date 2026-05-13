@@ -9,20 +9,29 @@ import {
   ReferenceLine
 } from 'recharts'
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { EquityPoint } from '../types'
 
 interface Props {
   data: EquityPoint[]
   initialBankroll: number
   equityByStrategy?: Record<string, EquityPoint[]>
+  equityByStrategyPlatform?: Record<string, Record<string, EquityPoint[]>>
 }
+
+type PlatformFilter = 'both' | 'kalshi' | 'polymarket'
 
 const STRATEGY_TABS = [
   { id: 'all', label: 'All', color: '#818cf8' },
   { id: '1', label: 'S1', color: '#94a3b8' },
   { id: '2', label: 'S2', color: '#60a5fa' },
   { id: '3', label: 'S3', color: '#a78bfa' },
+]
+
+const PLATFORM_FILTERS: { value: PlatformFilter; label: string }[] = [
+  { value: 'both', label: 'K+P' },
+  { value: 'kalshi', label: 'Kalshi' },
+  { value: 'polymarket', label: 'Polymarket' },
 ]
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -40,28 +49,64 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   )
 }
 
-export function EquityChart({ data, initialBankroll, equityByStrategy = {} }: Props) {
+export function EquityChart({ data, initialBankroll, equityByStrategy = {}, equityByStrategyPlatform = {} }: Props) {
   const [activeTab, setActiveTab] = useState('all')
+  const [tabFilters, setTabFilters] = useState<Record<string, PlatformFilter>>({
+    '1': 'both',
+    '2': 'both',
+    '3': 'both',
+  })
 
-  const activeData = activeTab === 'all' ? data : (equityByStrategy[activeTab] || [])
+  const currentFilter: PlatformFilter = activeTab !== 'all' ? (tabFilters[activeTab] ?? 'both') : 'both'
+
+  const activeData = useMemo(() => {
+    if (activeTab === 'all') return data
+    const filter = tabFilters[activeTab] ?? 'both'
+    if (filter === 'both') return equityByStrategy[activeTab] || []
+    return equityByStrategyPlatform[activeTab]?.[filter] || []
+  }, [activeTab, tabFilters, data, equityByStrategy, equityByStrategyPlatform])
+
+  const setTabFilter = (filter: PlatformFilter) => {
+    if (activeTab === 'all') return
+    setTabFilters(prev => ({ ...prev, [activeTab]: filter }))
+  }
 
   if (activeData.length === 0) {
     return (
       <div className="h-full flex flex-col">
-        <div className="flex gap-1 mb-2">
-          {STRATEGY_TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-indigo-500/20 text-indigo-300 font-medium'
-                  : 'text-slate-500 hover:text-slate-400'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-1 mb-2 flex-wrap">
+          <div className="flex gap-1">
+            {STRATEGY_TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-indigo-500/20 text-indigo-300 font-medium'
+                    : 'text-slate-500 hover:text-slate-400'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {activeTab !== 'all' && (
+            <div className="flex gap-1 ml-2 border-l border-indigo-500/20 pl-2">
+              {PLATFORM_FILTERS.map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setTabFilter(f.value)}
+                  className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
+                    currentFilter === f.value
+                      ? 'bg-indigo-500/20 text-indigo-300 font-medium'
+                      : 'text-slate-600 hover:text-slate-400'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
           <p className="text-xs">No trade history</p>
@@ -96,20 +141,39 @@ export function EquityChart({ data, initialBankroll, equityByStrategy = {} }: Pr
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
-      <div className="flex gap-1 mb-2">
-        {STRATEGY_TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
-              activeTab === tab.id
-                ? 'bg-indigo-500/20 text-indigo-300 font-medium'
-                : 'text-slate-500 hover:text-slate-400'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-center gap-1 mb-2 flex-wrap">
+        <div className="flex gap-1">
+          {STRATEGY_TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-indigo-500/20 text-indigo-300 font-medium'
+                  : 'text-slate-500 hover:text-slate-400'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {activeTab !== 'all' && (
+          <div className="flex gap-1 ml-2 border-l border-indigo-500/20 pl-2">
+            {PLATFORM_FILTERS.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setTabFilter(f.value)}
+                className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
+                  currentFilter === f.value
+                    ? 'bg-indigo-500/20 text-indigo-300 font-medium'
+                    : 'text-slate-600 hover:text-slate-400'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
         <span className={`ml-auto text-[10px] tabular-nums font-medium ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
           {isPositive ? '+' : ''}${currentPnl.toFixed(0)}
         </span>

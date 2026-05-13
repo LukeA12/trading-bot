@@ -80,6 +80,7 @@ function App() {
   }
   const equityCurve = data?.equity_curve ?? []
   const equityByStrategy = data?.equity_by_strategy ?? {}
+  const equityByStrategyPlatform = data?.equity_by_strategy_platform ?? {}
   const calibration = data?.calibration ?? null
 
   if (isLoading) {
@@ -174,7 +175,7 @@ function App() {
               </div>
             </div>
             <div className="h-[calc(100%-36px)] p-3">
-              <EquityChart data={equityCurve} initialBankroll={stats.bankroll - stats.total_pnl} equityByStrategy={equityByStrategy} />
+              <EquityChart data={equityCurve} initialBankroll={stats.bankroll - stats.total_pnl} equityByStrategy={equityByStrategy} equityByStrategyPlatform={equityByStrategyPlatform} />
             </div>
           </div>
 

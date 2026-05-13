@@ -215,6 +215,7 @@ class DashboardDTO(BaseModel):
     recent_trades: List[PositionDTO]
     equity_curve: List[dict]
     equity_by_strategy: dict = {}
+    equity_by_strategy_platform: dict = {}
     calibration: Optional[CalSummaryDTO] = None
     weather_signals: List[WxSignalDTO] = []
     weather_forecasts: List[WxForecastDTO] = []
@@ -954,6 +955,7 @@ async def full_dashboard(session: Session = Depends(db_session)):
 
     # Per-strategy equity curves
     equity_by_strategy = {}
+    equity_by_strategy_platform = {}
     for strat_id in [1, 2, 3]:
         strat_rows = [r for r in settled_rows if (r.strategy or 1) == strat_id and r.pnl is not None]
         cum = 0
@@ -966,6 +968,22 @@ async def full_dashboard(session: Session = Depends(db_session)):
                 "bankroll": cfg.INITIAL_BANKROLL + cum
             })
         equity_by_strategy[str(strat_id)] = strat_curve
+
+        # Per-platform equity curves for this strategy
+        platform_curves = {}
+        for plat in ["kalshi", "polymarket"]:
+            plat_rows = [r for r in strat_rows if (r.platform or "").lower() == plat]
+            pcum = 0
+            pcurve = []
+            for pos in plat_rows:
+                pcum += pos.pnl
+                pcurve.append({
+                    "timestamp": pos.timestamp.isoformat(),
+                    "pnl": pcum,
+                    "bankroll": cfg.INITIAL_BANKROLL + pcum
+                })
+            platform_curves[plat] = pcurve
+        equity_by_strategy_platform[str(strat_id)] = platform_curves
 
     # Calibration
     cal = _compute_cal_summary(session)
@@ -1010,6 +1028,7 @@ async def full_dashboard(session: Session = Depends(db_session)):
         recent_trades=recent,
         equity_curve=curve,
         equity_by_strategy=equity_by_strategy,
+        equity_by_strategy_platform=equity_by_strategy_platform,
         calibration=cal,
         weather_signals=wx_signals,
         weather_forecasts=wx_forecasts,
